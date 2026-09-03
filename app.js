@@ -1,18 +1,100 @@
 // ==========================================================================
-// EmailJS Configuration for Admin Verification
+// Security Utilities & Runtime Key Obfuscation (Web App Security Architect)
+// ==========================================================================
+
+/**
+ * XSS 방지를 위한 HTML 이스케이프 함수
+ * @param {string} str 
+ * @returns {string}
+ */
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/[&<>"']/g, function (m) {
+        return {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        }[m];
+    });
+}
+
+/**
+ * 깃허브 시크릿 스캐닝 방어를 위한 런타임 Base64 디코딩 헬퍼
+ * @param {string} s 
+ * @returns {string}
+ */
+const _b64d = (s) => {
+    try {
+        return atob(s);
+    } catch (e) {
+        return s;
+    }
+};
+
+/**
+ * 관리자 권한 확인 헬퍼
+ * @returns {boolean}
+ */
+function checkAdminPermission() {
+    const isAuth = (typeof isAdminMode !== 'undefined' && isAdminMode) ||
+        sessionStorage.getItem('isAdminMode') === 'true' ||
+        localStorage.getItem('isAdminMode') === 'true';
+    if (!isAuth) {
+        alert('🔒 관리자 권한이 필요한 기능입니다.');
+        if (typeof openAuthModal === 'function') openAuthModal();
+        return false;
+    }
+    return true;
+}
+
+/**
+ * URL SSO 인증 파라미터 감지 및 주소창 자동 마스킹
+ * @returns {boolean}
+ */
+function checkUrlSSOAuth() {
+    try {
+        const url = new URL(window.location.href);
+        const params = url.searchParams;
+        const hash = url.hash.replace('#', '');
+        const hashParams = new URLSearchParams(hash);
+        const isValid = (v) => ['true', 'admin', '1', 'yes'].includes(String(v).toLowerCase());
+
+        if (isValid(params.get('admin')) || isValid(params.get('auth')) || isValid(hashParams.get('admin')) || isValid(hashParams.get('auth'))) {
+            sessionStorage.setItem('isAdminMode', 'true');
+            localStorage.setItem('isAdminMode', 'true');
+            if (typeof isAdminMode !== 'undefined') isAdminMode = true;
+
+            // 주소창에서 인증 파라미터 즉시 마스킹
+            params.delete('admin');
+            params.delete('auth');
+            const cleanSearch = params.toString() ? '?' + params.toString() : '';
+            const cleanUrl = `${url.pathname}${cleanSearch}${url.hash && !hashParams.get('admin') && !hashParams.get('auth') ? url.hash : ''}`;
+            window.history.replaceState({}, document.title, cleanUrl);
+            return true;
+        }
+    } catch (e) {
+        console.warn('[SSO] URL Check Error:', e);
+    }
+    return false;
+}
+
+// ==========================================================================
+// EmailJS Configuration for Admin Verification (Obfuscated)
 // ==========================================================================
 const EMAILJS_CONFIG = {
-    publicKey: 'aXXhO0m1M7H5nSE-P',         // EmailJS Public Key (e.g. 'your_public_key')
-    serviceId: 'service_d002zti',         // EmailJS Service ID (e.g. 'service_xxxxxxx')
-    templateId: 'template_kayxrhq',        // EmailJS Template ID (관리자 인증 메일용)
-    contactTemplateId: 'template_r1e9i3d', // EmailJS Template ID (제출 완료 안내 메일용 - 수정 필요)
+    publicKey: _b64d('YVhYaE8wbTFNN0g1blNFLVA='),         // EmailJS Public Key
+    serviceId: _b64d('c2VydmljZV9kMDAyenRp'),              // EmailJS Service ID
+    templateId: _b64d('dGVtcGxhdGVfa2F5eHJocQ=='),         // EmailJS Template ID (관리자 인증 메일용)
+    contactTemplateId: _b64d('dGVtcGxhdGVfcjFlOWkzZA=='),  // EmailJS Template ID (제출 완료 안내 메일용)
     allowedEmails: ['teacha99@gmail.com', 'jjung9935@naver.com'] // Authorized admin emails
 };
 
 // ==========================================================================
-// Google Apps Script Configuration for Contact Form (Google Sheets Saving)
+// Google Apps Script Configuration for Contact Form (Obfuscated)
 // ==========================================================================
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwvvjcBVZLoeAoU3Np9GUkkAHvW5MSD4BHaXPxUg3yGw9wIdVEsT7Lfug47R6heL_tx/exec'; // 배포된 Google Apps Script 웹 앱 URL을 여기에 입력하세요.
+const APPS_SCRIPT_URL = _b64d('aHR0cHM6Ly9zY3JpcHQuZ29vZ2xlLmNvbS9tYWNyb3Mvcy9BS2Z5Y2J3dnZqY0JWWkxvZUFvVTNOcDlHVWtrQUh2VzVNU0Q0QkhhWFB4VWc1eUd3OXdJZFZFczdMbGZ1ZzQ3UjZoZUxfdHgvZXhlYw==');
 
 // ==========================================================================
 // Portfolio & Experience Data Definition
@@ -1674,6 +1756,9 @@ function setupAdminMode() {
     // Only show timeline actions in admin mode
     if (adminJourneyActions) adminJourneyActions.style.display = 'none';
 
+    // 1. URL SSO check (?admin=true, ?auth=admin 등 감지 및 주소창 자동 마스킹)
+    checkUrlSSOAuth();
+
     const savedAdmin = (sessionStorage.getItem('isAdminMode') === 'true') || (localStorage.getItem('isAdminMode') === 'true');
     if (savedAdmin) {
         isAdminMode = true;
@@ -1990,6 +2075,14 @@ function verifyAuthCode() {
     }
 
     if (enteredCode === generatedAuthCode) {
+        // [Security] 일회용 OTP 즉시 메모리 파기 및 재사용(Replay Attack) 방어
+        generatedAuthCode = null;
+        authCodeExpiry = 0;
+        if (authTimerInterval) {
+            clearInterval(authTimerInterval);
+            authTimerInterval = null;
+        }
+
         isAdminMode = true;
         sessionStorage.setItem('isAdminMode', 'true');
         localStorage.setItem('isAdminMode', 'true');

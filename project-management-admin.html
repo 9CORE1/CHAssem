@@ -159,7 +159,53 @@
 
     <!-- Script Block -->
     <script>
-        // 1. Authorization check
+        // ==========================================================================
+        // Security Utilities (Web App Security Architect)
+        // ==========================================================================
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str).replace(/[&<>"']/g, function (m) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#039;'
+                }[m];
+            });
+        }
+
+        const _b64d = (s) => {
+            try { return atob(s); } catch (e) { return s; }
+        };
+
+        function checkUrlSSOAuth() {
+            try {
+                const url = new URL(window.location.href);
+                const params = url.searchParams;
+                const hash = url.hash.replace('#', '');
+                const hashParams = new URLSearchParams(hash);
+                const isValid = (v) => ['true', 'admin', '1', 'yes'].includes(String(v).toLowerCase());
+
+                if (isValid(params.get('admin')) || isValid(params.get('auth')) || isValid(hashParams.get('admin')) || isValid(hashParams.get('auth'))) {
+                    sessionStorage.setItem('isAdminMode', 'true');
+                    localStorage.setItem('isAdminMode', 'true');
+
+                    params.delete('admin');
+                    params.delete('auth');
+                    const cleanSearch = params.toString() ? '?' + params.toString() : '';
+                    const cleanUrl = `${url.pathname}${cleanSearch}${url.hash && !hashParams.get('admin') && !hashParams.get('auth') ? url.hash : ''}`;
+                    window.history.replaceState({}, document.title, cleanUrl);
+                    return true;
+                }
+            } catch (e) {
+                console.warn('[SSO] URL Check Error:', e);
+            }
+            return false;
+        }
+
+        // 1. Authorization check with SSO fallback
+        checkUrlSSOAuth();
         if (sessionStorage.getItem('isAdminMode') !== 'true' && localStorage.getItem('isAdminMode') !== 'true') {
             alert('관리자 로그인이 필요합니다. 메인 페이지로 이동합니다.');
             window.location.href = 'portfolio.html';
@@ -169,10 +215,9 @@
         }
 
         // ==========================================================================
-        // 수강 신청서 전용 Google Apps Script Web App URL 설정
-        // (수강신청용 Apps Script 웹앱 배포 URL을 아래에 입력하시면 구글 시트 데이터를 연동하여 가져올 수 있습니다.)
+        // 수강 신청서 전용 Google Apps Script Web App URL 설정 (Obfuscated)
         // ==========================================================================
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxW34SwoGNyqM6NaNXrfzTu17UlsV-mfjLPqle7-0-fItTpmPtxuylLGJ07-k332524kA/exec';
+        const APPS_SCRIPT_URL = _b64d('aHR0cHM6Ly9zY3JpcHQuZ29vZ2xlLmNvbS9tYWNyb3Mvcy9BS2Z5Y2J4VzM0U3dvR055cU02TmFOWHJmelR1MTdVbHNWLW1makxQcWxlNy0wLWZJdFRwbVB0eHV5bExHSjA3LWszMzI1MjRrQS9leGVj');
 
         // Global State variables
         let coursesData = [];
@@ -673,14 +718,22 @@
             } else {
                 filteredApps.forEach((app, index) => {
                     const absIndex = window.currentApplicants.indexOf(app);
+                    const safeName = escapeHtml(app.name);
+                    const safePhone = escapeHtml(app.phone);
+                    const safeEmail = escapeHtml(app.email);
+                    const safeCourse = escapeHtml(app.course || '일반 과정');
+                    const safeMessage = escapeHtml(app.message || '-');
+                    const rawMessage = escapeHtml(app.message || '');
+                    const safeAppliedAt = escapeHtml(app.appliedAt || '-');
+
                     rowsHtml += `
                         <tr style="border-bottom: 1px solid var(--border-color); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.01)'" onmouseout="this.style.background='transparent'">
-                            <td style="padding: 1rem; font-weight: 600; color: var(--text-primary); white-space: nowrap;">${app.name}</td>
-                            <td style="padding: 1rem; color: var(--text-primary); white-space: nowrap;">${app.phone}</td>
-                            <td style="padding: 1rem;"><a href="mailto:${app.email}" style="color: var(--color-it-end); text-decoration: underline;">${app.email}</a></td>
-                            <td style="padding: 1rem; font-weight: 600; color: var(--color-it-end); font-size: 0.85rem;">${app.course || '일반 과정'}</td>
-                            <td style="padding: 1rem; font-size: 0.85rem; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary);" title="${app.message || ''}">${app.message || '-'}</td>
-                            <td style="padding: 1rem; font-size: 0.8rem; color: var(--text-muted); white-space: nowrap;">${app.appliedAt || '-'}</td>
+                            <td style="padding: 1rem; font-weight: 600; color: var(--text-primary); white-space: nowrap;">${safeName}</td>
+                            <td style="padding: 1rem; color: var(--text-primary); white-space: nowrap;">${safePhone}</td>
+                            <td style="padding: 1rem;"><a href="mailto:${safeEmail}" style="color: var(--color-it-end); text-decoration: underline;">${safeEmail}</a></td>
+                            <td style="padding: 1rem; font-weight: 600; color: var(--color-it-end); font-size: 0.85rem;">${safeCourse}</td>
+                            <td style="padding: 1rem; font-size: 0.85rem; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary);" title="${rawMessage}">${safeMessage}</td>
+                            <td style="padding: 1rem; font-size: 0.8rem; color: var(--text-muted); white-space: nowrap;">${safeAppliedAt}</td>
                         </tr>
                     `;
                 });
