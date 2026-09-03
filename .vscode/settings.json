@@ -1,0 +1,10 @@
+{
+  "files.exclude": {
+    "temp_extract/": true,
+    "scratch/": true
+  },
+  "search.exclude": {
+    "temp_extract/": true,
+    "scratch/": true
+  }
+}
